@@ -1,0 +1,8 @@
+{
+  "qoder-agent-default": {
+    "agentId": "agent_xxx",
+    "environmentId": "env_xxx",
+    "agentVersion": 1,
+    "title": "CC Switch via Qoder"
+  }
+}

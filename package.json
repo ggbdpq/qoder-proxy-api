@@ -1,0 +1,19 @@
+{
+  "name": "qoder-proxy-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenAI-compatible local proxy for Qoder Cloud Agents, optimized for CC Switch first.",
+  "bin": {
+    "qoder-proxy-api": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node ./src/index.js",
+    "test": "node --test",
+    "setup:qoder": "node ./scripts/setup-qoder.mjs"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "UNLICENSED"
+}
