@@ -1,23 +1,27 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
-import process from 'node:process';
-import { loadConfig, publicConfig } from './config.js';
-import { createServer } from './server.js';
+import { existsSync, readFileSync } from "node:fs";
+import process from "node:process";
+import { createApp, resolveProviderId } from "./bootstrap.js";
+import { createServer } from "./server/server.js";
+import { publicConfig } from "./config.js";
 
-function loadDotEnv(path = '.env') {
+function loadDotEnv(path = ".env") {
   if (!existsSync(path)) return;
-  if (typeof process.loadEnvFile === 'function') {
+  if (typeof process.loadEnvFile === "function") {
     process.loadEnvFile(path);
     return;
   }
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const index = trimmed.indexOf('=');
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const index = trimmed.indexOf("=");
     if (index < 1) continue;
     const key = trimmed.slice(0, index).trim();
     let value = trimmed.slice(index + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       value = value.slice(1, -1);
     }
     if (process.env[key] === undefined) process.env[key] = value;
@@ -26,17 +30,25 @@ function loadDotEnv(path = '.env') {
 
 loadDotEnv();
 
-const config = loadConfig();
-const server = createServer(config);
-
-server.listen(config.port, config.host, () => {
-  const shown = publicConfig(config);
-  console.log(`qoder-proxy-api listening on http://${config.host}:${config.port}`);
-  console.log(`models: ${Object.keys(config.modelMap).join(', ')}`);
-  console.log(`qoder cloud base: ${shown.qoderApiBaseUrl}`);
+const providerId = resolveProviderId();
+const app = createApp({ providerId });
+const server = createServer(app.config, {
+  providerRegistry: app.registry,
+  modelRoutes: app.modelRoutes,
+  defaultProviderId: app.defaultProviderId,
 });
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
+server.listen(app.config.port, app.config.host, () => {
+  const shown = publicConfig(app.config);
+  console.log(`qoder-proxy-api listening on http://${app.config.host}:${app.config.port}`);
+  console.log(`provider: ${providerId} (npm start 默认 gateway；--provider=cli|cloudAgents 可切换)`);
+  if (providerId === "cloudAgents") {
+    console.log(`models: ${Object.keys(app.config.modelMap).join(", ")}`);
+    console.log(`qoder cloud base: ${shown.qoderApiBaseUrl}`);
+  }
+});
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     server.close(() => process.exit(0));
   });

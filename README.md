@@ -1,47 +1,119 @@
 # qoder-proxy-api
 
-`qoder-proxy-api` 是一个本地兼容层：下游暴露 OpenAI/Anthropic 风格接口，上游调用 Qoder Cloud Agents。优先目标是 CC Switch，其次 Cockpit Tools，最后 CLIProxyAPI。
+`qoder-proxy-api` 是一个本地多 Provider 协议兼容层：下游暴露 OpenAI / Anthropic 风格接口，上游支持三条互相隔离的 Qoder 链路。
 
-它不是 Qoder 桌面端登录态抓取器，也不复用 cookie；只走 Qoder 官方 PAT/SAT 对应的 Cloud Agents API。
-
-> **定位声明**：本项目为个人**学习研究**用途——通过公开的 Cloud Agents API 理解协议兼容层
-> （OpenAI Chat Completions / Responses / Anthropic Messages）的适配设计。与 Qoder 官方
-> 无任何关联，接口行为随官方变更可能失效；请遵守 Qoder 服务条款，自行保管令牌。
-
-## 当前能力
-
-- `GET /v1/models`：返回本地模型别名。
-- `POST /v1/chat/completions`：OpenAI Chat Completions 兼容，支持 `stream: true`。
-- `POST /v1/responses`：OpenAI Responses 兼容，支持 `stream: true`。
-- `POST /v1/messages`：Anthropic Messages 最小兼容，支持 `stream: true`，用于 CC Switch / Claude Code 风格客户端优先验证。
-- `GET /health`：本地健康检查和脱敏配置预览。
-
-## 环境变量
-
-最小配置：
-
-```powershell
-$env:QODER_ACCESS_TOKEN="qoder_pat_or_sat"
-$env:QODER_AGENT_ID="agent_xxx"
-$env:QODER_ENVIRONMENT_ID="env_xxx"
-$env:PROXY_API_KEY="local-dev-key"
-node .\src\index.js
+```
+OpenAI Chat / Responses / Anthropic Messages
+            │  协议适配器（只消费 Canonical Event）
+            ▼
+   Canonical Request / Event  ←—— Provider Contract
+            │
+            ▼
+     Provider Registry + 显式模型路由
+      /           |            \
+  Gateway      CLI        Cloud Agents
+（默认）   （qodercli 子进程）  （官方 PAT + Cloud API）
 ```
 
-可选配置：
+> **定位声明**：本项目为个人**学习研究**用途。Gateway / CLI 链路涉及客户端私有协议，
+> 行为随官方客户端升级可能失效；与 Qoder 官方无任何关联。请遵守 Qoder 服务条款，
+> 自行保管令牌。不实现账号池、额度共享或限流绕过。
 
-| 变量 | 默认值 | 说明 |
-|---|---:|---|
-| `HOST` | `127.0.0.1` | 监听地址 |
-| `PORT` / `QODER_PROXY_PORT` | `8320` | 监听端口 |
-| `QODER_API_BASE_URL` | `https://api.qoder.com/api/v1/cloud` | Qoder Cloud Agents API base |
-| `QODER_MODEL_ID` / `QODER_DEFAULT_MODEL` | `qoder-agent-default` | 单模型模式下的本地模型名 |
-| `QODER_AGENT_VERSION` | 空 | 固定 Agent 版本 |
-| `QODER_MODEL_MAP` | 空 | JSON 对象，多模型映射 |
-| `QODER_ARCHIVE_EPHEMERAL` | `true` | 无 session key 请求完成后归档 Qoder Session |
-| `QODER_SESSION_TTL_MS` | `7200000` | `x-qoder-session-id` 复用缓存时长 |
+## 三条 Provider 链路
 
-多模型示例：
+| | `gateway`（默认） | `cli` | `cloudAgents` |
+|---|---|---|---|
+| 上游 | Qoder Client Gateway 私有协议 | 本地 `qodercli` 子进程 | Cloud Agents 官方 API |
+| 认证 | `QODER_GATEWAY_PAT` → jobToken → Bearer | 复用 `qodercli login` 登录态 | `QODER_ACCESS_TOKEN`（PAT/SAT） |
+| 流式 | SSE（原生） | stream-json（JSONL） | SSE |
+| Tools | OpenAI 风格原生通道（未真机验证） | 显式不支持 | 显式不支持 |
+| Thinking | `reasoning_content`（未真机验证） | reasoning part | 显式不支持 |
+| 模型 | 动态目录 + 兜底表 | CLI model level | `QODER_MODEL_MAP` 别名 |
+| 成熟度 | **实验性**（逆向协议，随时漂移） | 依赖本机 CLI 版本 | 已验证（v0.1 起） |
+
+三条链路的账号体系、额度来源、模型语义完全隔离：**没有 Provider 自动 fallback**，失败直接返回清晰错误。
+
+## 启动方式
+
+```powershell
+npm start                    # gateway（默认；需要 QODER_GATEWAY_PAT）
+npm run start:cli            # qodercli 子进程
+npm run start:cloud-agents   # Cloud Agents（v0.1 已验证路径）
+
+# 等价 CLI：
+node src/index.js --provider=gateway
+node src/index.js --provider=cli
+node src/index.js --provider=cloud-agents   # 兼容 cloudAgents 写法
+```
+
+默认监听 `http://127.0.0.1:8320`（只绑定 loopback，可用 `HOST`/`PORT` 覆盖）。
+
+## 下游接口（三条链路共用）
+
+- `GET /v1/models`：统一 Model Registry 聚合各 Provider 的模型。
+- `POST /v1/chat/completions`：OpenAI Chat，支持 `stream: true`。
+- `POST /v1/responses`：OpenAI Responses，支持 `stream: true`。
+- `POST /v1/messages`：Anthropic Messages，供 CC Switch / Claude Code 使用。
+- `GET /health`：脱敏配置预览（不出 secret）。
+
+鉴权：配置了 `PROXY_API_KEY` 时，下游请求必须带 `Authorization: Bearer <key>`。
+`PROXY_API_KEY` 与 Qoder 凭证永久分离，互不复用。
+
+## Gateway 链路配置
+
+```powershell
+$env:QODER_GATEWAY_PAT = "qoder_pat_xxx"   # 必填，缺失时启动即 fail fast
+$env:QODER_GATEWAY_REGION = "cn"           # 目前仅 cn 端点
+# $env:QODER_GATEWAY_MODEL_CACHE_TTL_MS = "600000"
+npm start
+```
+
+模型名可直接用动态目录里的 display name（如 `Qwen3.7-Max`、`Qwen3.7-Plus`），
+缺省 `default` 走目录里的 `is_default` 项。
+
+**实验性声明**：Gateway 协议来自公开协议参考实现的独立移植，
+本机仅完成协议形状级验证（假上游 + 差分 golden），未经真实账号端到端验证。
+tools / thinking / vision 的能力声明以参考实现为准，协议漂移时首先怀疑这三项。
+
+## CLI 链路配置
+
+```powershell
+# 前置：qodercli 已安装并 qodercli login
+$env:QODER_CLI_BIN = "qodercli"            # 或指向真实 node 入口
+# $env:QODER_CLI_NODE = "node"             # QODER_CLI_BIN 是 .js/.mjs 时指定解释器
+# $env:QODER_CLI_MODEL = "ultimate"
+# $env:QODER_CLI_TIMEOUT_MS = "600000"
+npm run start:cli
+```
+
+- 每次请求一个独立子进程（`qodercli -p <prompt> -q -f stream-json`），不经 shell。
+- 多轮上下文由请求 messages 显式重放为 prompt。
+- 客户端断开或超时会终止子进程（SIGTERM → SIGKILL 升级）。
+- Windows 下 npm `.cmd` shim 无法无 shell 启动（Node 安全策略），代理**有意不降级到 shell**：
+  把 `QODER_CLI_BIN` 指向包内真实 `cli.js` 入口并用 `QODER_CLI_NODE` 指定 node。
+
+## Cloud Agents 链路配置
+
+```powershell
+$env:QODER_ACCESS_TOKEN = "qoder_pat_or_sat"
+$env:QODER_AGENT_ID = "agent_xxx"
+$env:QODER_ENVIRONMENT_ID = "env_xxx"
+$env:PROXY_API_KEY = "local-dev-key"
+npm run start:cloud-agents
+```
+
+或一次性初始化（自动创建 Environment / Agent 并写入 `.env`）：
+
+其他两条链路没有可自动创建的资源（gateway 的 PAT 要在 qoder.cn/account/integrations 手动创建；cli 直接用 `qodercli login` 登录态），可用 `npm run doctor` 一次性体检三条链路的配置状态：
+
+```powershell
+$env:QODER_ACCESS_TOKEN = "pt_xxx"
+npm run setup:cloudAgents
+Remove-Item Env:QODER_ACCESS_TOKEN
+npm run start:cloud-agents
+```
+
+多模型（`QODER_MODEL_MAP`，JSON）：
 
 ```powershell
 $env:QODER_MODEL_MAP='{
@@ -50,202 +122,54 @@ $env:QODER_MODEL_MAP='{
 }'
 ```
 
+会话语义：`x-qoder-session-id` 头（或 `metadata.session_id` / `conversation_id`）复用上游
+Session（TTL 内）；无 key 的请求用完即归档（`QODER_ARCHIVE_EPHEMERAL=false` 关闭）。
 
-## 本地部署
+## 显式模型路由
 
-一次性初始化 Qoder 账号配置，会自动获取/创建默认 Environment 和 `qoder-proxy-agent`，并把结果写入被 git 忽略的 `.env`：
-
-```powershell
-$env:QODER_ACCESS_TOKEN="pt_xxx"
-npm run setup:qoder
-Remove-Item Env:QODER_ACCESS_TOKEN
-npm start
-```
-
-启动后本地服务地址：`http://127.0.0.1:8320`。
-
-## 学习指南：三个 Qoder 配置怎么来
-
-这三个值都来自 Qoder Cloud Agents API，不来自 CC Switch，也不是 Claude Code 的配置项。
-
-| 变量 | 来源 | 用途 |
-|---|---|---|
-| `QODER_ACCESS_TOKEN` | Qoder Console 创建的 PAT，或组织 Service Account 换出来的 SAT | 代理访问 Qoder 上游 API 的凭证 |
-| `QODER_ENVIRONMENT_ID` | Cloud Agents Environment 的 `id`，形如 `env_xxx` | Qoder 会话运行在哪个云环境里 |
-| `QODER_AGENT_ID` | Cloud Agents Agent 的 `id`，形如 `agent_xxx` | Qoder 会话使用哪个 Agent 定义、模型和工具集 |
-
-### 我刚才实际做了什么
-
-本仓库的 `npm run setup:qoder` 跑的是 `scripts/setup-qoder.mjs`，逻辑很短：
-
-1. 读取 `QODER_ACCESS_TOKEN`。
-2. `GET https://api.qoder.com/api/v1/cloud/environments`：有 Environment 就用名为 `default` 的，否则用第一个。
-3. 如果没有 Environment，就 `POST /environments` 创建 `{ "name": "default" }`，得到 `QODER_ENVIRONMENT_ID`。
-4. `GET https://api.qoder.com/api/v1/cloud/agents`：有名为 `qoder-proxy-agent` 的 Agent 就用它，否则用第一个。
-5. 如果没有 Agent，就 `POST /agents` 创建一个 `model: "ultimate"`、带 Bash/Read/Write/Edit/Glob/Grep/WebFetch/WebSearch 工具的 Agent，得到 `QODER_AGENT_ID`。
-6. 生成本地 `PROXY_API_KEY`，把四个值写进 `.env`。
-
-`.env` 只给本地代理使用；CC Switch 只填 `.env` 里的 `PROXY_API_KEY`，不要填 Qoder PAT。
-
-### 手动获取 `QODER_ENVIRONMENT_ID`
+`QODER_MODEL_ROUTES`（JSON）把客户端可见别名显式指到某条链路：
 
 ```powershell
-$env:QODER_API_BASE_URL = "https://api.qoder.com"
-$headers = @{ Authorization = "Bearer $env:QODER_ACCESS_TOKEN" }
-$jsonHeaders = @{
-  Authorization = "Bearer $env:QODER_ACCESS_TOKEN"
-  "Content-Type" = "application/json"
-}
-
-$envList = Invoke-RestMethod "$env:QODER_API_BASE_URL/api/v1/cloud/environments" -Headers $headers
-$envList.data | Select-Object id, name
+$env:QODER_MODEL_ROUTES='{
+  "qoder-cc":    {"provider": "cloudAgents", "model": "qoder-cc"},
+  "qoder-cli-u": {"provider": "cli",         "model": "ultimate"},
+  "qoder-qwen":  {"provider": "gateway",     "model": "Qwen3.7-Max"}
+}'
 ```
 
-如果列表为空，创建一个默认环境：
+规则：显式路由优先；未命中的模型名直通**默认 provider**（由其模型解析器裁决，
+未知即 400 `unknown model`）。这是路由策略而非故障切换——任何上游失败都会原样报错。
 
-```powershell
-$body = @{ name = "default" } | ConvertTo-Json
-$createdEnv = Invoke-RestMethod "$env:QODER_API_BASE_URL/api/v1/cloud/environments" `
-  -Method Post `
-  -Headers $jsonHeaders `
-  -Body $body
-
-$env:QODER_ENVIRONMENT_ID = $createdEnv.id
-$env:QODER_ENVIRONMENT_ID
-```
-
-### 手动获取 `QODER_AGENT_ID`
-
-```powershell
-$agentList = Invoke-RestMethod "$env:QODER_API_BASE_URL/api/v1/cloud/agents" -Headers $headers
-$agentList.data | Select-Object id, name, model
-```
-
-如果列表为空，创建一个给代理用的 Agent：
-
-```powershell
-$agentBody = @{
-  name = "qoder-proxy-agent"
-  model = "ultimate"
-  system = "You are an efficient programming assistant skilled at writing code and troubleshooting issues."
-  tools = @(
-    @{
-      type = "agent_toolset_20260401"
-      enabled_tools = @("Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch")
-    }
-  )
-} | ConvertTo-Json -Depth 10
-
-$createdAgent = Invoke-RestMethod "$env:QODER_API_BASE_URL/api/v1/cloud/agents" `
-  -Method Post `
-  -Headers $jsonHeaders `
-  -Body $agentBody
-
-$env:QODER_AGENT_ID = $createdAgent.id
-$env:QODER_AGENT_ID
-```
-
-### 写入本地 `.env`
-
-```powershell
-@"
-QODER_ACCESS_TOKEN=$env:QODER_ACCESS_TOKEN
-QODER_AGENT_ID=$env:QODER_AGENT_ID
-QODER_ENVIRONMENT_ID=$env:QODER_ENVIRONMENT_ID
-PROXY_API_KEY=local-dev-key
-HOST=127.0.0.1
-PORT=8320
-QODER_MODEL_ID=qoder-agent-default
-"@ | Set-Content -LiteralPath .env -Encoding UTF8
-```
-
-### 验证配置是否可用
-
-```powershell
-npm start
-
-$headers = @{ Authorization = "Bearer local-dev-key"; "Content-Type" = "application/json" }
-Invoke-RestMethod http://127.0.0.1:8320/health -Headers $headers
-Invoke-RestMethod http://127.0.0.1:8320/v1/chat/completions `
-  -Headers $headers `
-  -Method Post `
-  -Body '{"model":"qoder-agent-default","messages":[{"role":"user","content":"只回复 OK"}]}'
-```
-## CC Switch 配置优先路径
-
-优先使用 Anthropic-compatible / Claude-compatible 自定义供应商：
-
-- Base URL: `http://127.0.0.1:8320`
-- API Key: `PROXY_API_KEY` 的值，例如 `local-dev-key`
-- Model: `qoder-agent-default` 或 `QODER_MODEL_MAP` 中的别名
-- Endpoint: `/v1/messages`
-
-如果 CC Switch 只提供 OpenAI-compatible 自定义供应商：
-
-- Base URL: `http://127.0.0.1:8320/v1`
-- API Key: `PROXY_API_KEY` 的值
-- Model: `qoder-agent-default`
-- Endpoint: `/chat/completions` 或 `/responses`
-
-## Cockpit Tools 配置路径
-
-按 OpenAI-compatible provider 配置：
-
-- Base URL: `http://127.0.0.1:8320/v1`
-- API Key: `PROXY_API_KEY` 的值
-- Model: `qoder-agent-default`
-
-## CLIProxyAPI 接入样例
-
-在 CLIProxyAPI 的 `openai-compatibility` 中把本代理作为上游：
-
-```yaml
-openai-compatibility:
-  - name: qoder-proxy
-    base-url: http://127.0.0.1:8320/v1
-    api-key-entries:
-      - api-key: local-dev-key
-    models:
-      - name: qoder-agent-default
-        alias: qoder-agent-default
-```
-
-## 验证
+## 测试
 
 ```powershell
 npm test
-
-$headers = @{ Authorization = "Bearer local-dev-key"; "Content-Type" = "application/json" }
-Invoke-RestMethod http://127.0.0.1:8320/v1/models -Headers $headers
-Invoke-RestMethod http://127.0.0.1:8320/v1/chat/completions -Headers $headers -Method Post -Body '{"model":"qoder-agent-default","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-## 限制
+86+ 用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
+协议 golden、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、
+非零退出）、Gateway codec 与 Python 参考实现的差分 golden。
+真实凭证的 live 测试未内置；接真实网关前请先抓包核对 fixtures。
 
-- 当前是 Agent-to-API 兼容层，不是低延迟原生模型 API。
-- 工具调用/function calling 暂未翻译；复杂 Claude Code 工具协议要在 CC Switch 真机请求中继续补齐。
-- Qoder 真实 SSE 事件若新增字段，`src/openai.js` 的事件提取器需要按样本扩展。
+## 目录结构
 
-## 扩展方向（学习研究路线）
+```
+src/
+├── index.js / bootstrap.js      启动与 Provider 组装
+├── core/                        Canonical Request/Event、Provider Contract、聚合、能力协商、错误码
+├── protocols/openai/            Chat / Responses / 请求转换 / 流式 wire
+├── protocols/anthropic/         Messages / 请求转换 / 流式 wire
+├── routing/                     Provider Registry、显式模型路由
+├── server/                      HTTP 路由、SSE 写出、错误映射
+├── providers/gateway/           auth（jobToken/Bearer/刷新）、codec、models、client、normalize
+├── providers/cli/               process（spawn/abort/timeout）、streamParser、config
+└── providers/cloudAgents/       client、normalize、config、session store
+```
 
-按"体感收益 ÷ 成本"排序，逐项对应上面的「限制」：
-
-1. **function calling 协议翻译**：把下游 tools/tool_calls 翻译成 Qoder Agent 的工具协议，
-   打通 Claude Code 的完整工具回路——当前最大的功能缺口。
-2. **SSE 事件提取器样本化**：每遇到一种新的 Qoder SSE 事件，往 `src/openai.js` 的
-   提取器加一个用例并配 fixtures（`examples/` 已留目录），测试驱动扩展。
-3. **彩色 diff 与流式 Usage**：`/v1/chat/completions` 流式尾部补 usage 事件；
-   Responses 接口对齐官方字段。
-4. **多模型路由打磨**：`QODER_MODEL_MAP` 多模型下按请求模型名路由不同 Agent，
-   并支持 per-model 会话策略。
-5. **部署形态**：Dockerfile + docker-compose（.env 挂载），验证 `HOST=0.0.0.0`
-   场景下的安全边界。
-
-欢迎按上面的路线提 issue / PR；学习研究用途，随意 fork 与魔改。
+依赖方向硬约束：`protocols` 不依赖 `providers`；`providers` 不依赖 `protocols`；
+`routing` 只认识 core contract；Provider 私有协议细节不离开各自目录。
+runtime dependencies 为零（仅 Node 24 标准库）。
 
 ## License
 
 [MIT](LICENSE) © 2026 ggbdpq
-
-
-

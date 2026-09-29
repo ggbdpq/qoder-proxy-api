@@ -1,27 +1,41 @@
-import { decodeSseData, parseSseChunk } from './sse.js';
-import { extractQoderError, extractTextDelta, isQoderIdleEvent, isQoderRunningEvent } from './openai.js';
+// Qoder Cloud Agents HTTP/SSE 客户端与 SessionStore，自 src/qoder-client.js 机械迁入。
+// 行为保持 v0.1 不变；超时语义与调用方 signal 通过 AbortSignal.any 组合。
+import { decodeSseData, parseSseChunk } from "../../sse.js";
+import {
+  extractQoderError,
+  extractTextDelta,
+  isQoderIdleEvent,
+  isQoderRunningEvent,
+} from "./normalize.js";
 
-export class QoderClient {
+export class CloudAgentsClient {
   constructor({ baseUrl, accessToken, fetchImpl = globalThis.fetch, requestTimeoutMs = 600000 }) {
-    this.baseUrl = String(baseUrl || '').replace(/\/+$/, '');
-    this.accessToken = accessToken || '';
+    this.baseUrl = String(baseUrl || "").replace(/\/+$/, "");
+    this.accessToken = accessToken || "";
     this.fetch = fetchImpl;
     this.requestTimeoutMs = requestTimeoutMs;
   }
 
   assertReady() {
-    if (!this.baseUrl) throw new Error('QODER_API_BASE_URL is empty');
-    if (!this.accessToken) throw new Error('QODER_ACCESS_TOKEN is empty');
-    if (typeof this.fetch !== 'function') throw new Error('fetch is not available in this Node runtime');
+    if (!this.baseUrl) throw new Error("QODER_API_BASE_URL is empty");
+    if (!this.accessToken) throw new Error("QODER_ACCESS_TOKEN is empty");
+    if (typeof this.fetch !== "function")
+      throw new Error("fetch is not available in this Node runtime");
   }
 
   async createSession(modelSpec, { title, metadata } = {}) {
     this.assertReady();
-    if (!modelSpec?.agentId) throw new Error(`model ${modelSpec?.modelId || ''} is missing agentId`);
-    if (!modelSpec?.environmentId) throw new Error(`model ${modelSpec?.modelId || ''} is missing environmentId`);
+    if (!modelSpec?.agentId)
+      throw new Error(`model ${modelSpec?.modelId || ""} is missing agentId`);
+    if (!modelSpec?.environmentId)
+      throw new Error(`model ${modelSpec?.modelId || ""} is missing environmentId`);
 
-    const agent = { id: modelSpec.agentId, type: 'agent' };
-    if (modelSpec.agentVersion !== undefined && modelSpec.agentVersion !== null && modelSpec.agentVersion !== '') {
+    const agent = { id: modelSpec.agentId, type: "agent" };
+    if (
+      modelSpec.agentVersion !== undefined &&
+      modelSpec.agentVersion !== null &&
+      modelSpec.agentVersion !== ""
+    ) {
       agent.version = Number(modelSpec.agentVersion);
     }
 
@@ -30,30 +44,32 @@ export class QoderClient {
       environment_id: modelSpec.environmentId,
       title: title || modelSpec.title || `Qoder proxy: ${modelSpec.modelId}`,
       metadata: {
-        via: 'qoder-proxy-api',
+        via: "qoder-proxy-api",
         model: modelSpec.modelId,
         ...(modelSpec.metadata || {}),
         ...(metadata || {}),
       },
     };
 
-    const json = await this.requestJson('/sessions', { method: 'POST', body });
+    const json = await this.requestJson("/sessions", { method: "POST", body });
     return json?.id || json?.data?.id || json?.session?.id;
   }
 
   async sendUserMessage(sessionId, text) {
     this.assertReady();
-    const content = [{ type: 'text', text: text || ' ' }];
+    const content = [{ type: "text", text: text || " " }];
     return this.requestJson(`/sessions/${encodeURIComponent(sessionId)}/events`, {
-      method: 'POST',
-      body: { events: [{ type: 'user.message', content }] },
+      method: "POST",
+      body: { events: [{ type: "user.message", content }] },
     });
   }
 
   async archiveSession(sessionId) {
     if (!sessionId) return;
     try {
-      await this.requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, { method: 'POST' });
+      await this.requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, {
+        method: "POST",
+      });
     } catch {
       // Archival is best-effort for ephemeral compatibility calls.
     }
@@ -61,11 +77,14 @@ export class QoderClient {
 
   async latestEventId(sessionId) {
     try {
-      const json = await this.requestJson(`/sessions/${encodeURIComponent(sessionId)}/events?limit=1&order=desc`, { method: 'GET' });
+      const json = await this.requestJson(
+        `/sessions/${encodeURIComponent(sessionId)}/events?limit=1&order=desc`,
+        { method: "GET" },
+      );
       const events = Array.isArray(json?.data) ? json.data : [];
-      return events[0]?.id || '';
+      return events[0]?.id || "";
     } catch {
-      return '';
+      return "";
     }
   }
 
@@ -74,7 +93,7 @@ export class QoderClient {
     const lastEventId = await this.latestEventId(sessionId);
     await this.sendUserMessage(sessionId, prompt);
 
-    let output = '';
+    let output = "";
     let started = false;
     const extractionState = { fullTextsSeen: new Set() };
 
@@ -88,7 +107,7 @@ export class QoderClient {
       }
 
       const delta = extractTextDelta(event, extractionState);
-      if (delta && (started || String(event.event || '').includes('agent.message'))) {
+      if (delta && (started || String(event.event || "").includes("agent.message"))) {
         started = true;
         output += delta;
         if (onDelta) onDelta(delta, event);
@@ -102,19 +121,25 @@ export class QoderClient {
     return output;
   }
 
-  async *streamEvents(sessionId, signal, lastEventId = '') {
-    const headers = { accept: 'text/event-stream' };
-    if (lastEventId) headers['last-event-id'] = lastEventId;
-    const response = await this.request(`/sessions/${encodeURIComponent(sessionId)}/events/stream`, {
-      method: 'GET',
-      headers,
-      signal,
-    });
+  async *streamEvents(sessionId, signal, lastEventId = "") {
+    const headers = { accept: "text/event-stream" };
+    if (lastEventId) headers["last-event-id"] = lastEventId;
+    const response = await this.request(
+      `/sessions/${encodeURIComponent(sessionId)}/events/stream`,
+      {
+        method: "GET",
+        headers,
+        signal,
+      },
+    );
 
     const decoder = new TextDecoder();
-    let remainder = '';
+    let remainder = "";
     for await (const chunk of response.body) {
-      const { events, remainder: nextRemainder } = parseSseChunk(remainder, decoder.decode(chunk, { stream: true }));
+      const { events, remainder: nextRemainder } = parseSseChunk(
+        remainder,
+        decoder.decode(chunk, { stream: true }),
+      );
       remainder = nextRemainder;
       for (const rawEvent of events) {
         const json = decodeSseData(rawEvent.data);
@@ -123,7 +148,7 @@ export class QoderClient {
     }
 
     if (remainder.trim()) {
-      const { events } = parseSseChunk('', `${remainder}\n\n`);
+      const { events } = parseSseChunk("", `${remainder}\n\n`);
       for (const rawEvent of events) {
         const json = decodeSseData(rawEvent.data);
         yield { ...rawEvent, json };
@@ -131,7 +156,7 @@ export class QoderClient {
     }
   }
 
-  async requestJson(path, { method = 'GET', body, headers = {}, signal } = {}) {
+  async requestJson(path, { method = "GET", body, headers = {}, signal } = {}) {
     const response = await this.request(path, { method, body, headers, signal });
     const text = await response.text();
     if (!text) return {};
@@ -142,10 +167,10 @@ export class QoderClient {
     }
   }
 
-  async request(path, { method = 'GET', body, headers = {}, signal } = {}) {
+  async request(path, { method = "GET", body, headers = {}, signal } = {}) {
     this.assertReady();
-    const controller = signal ? null : new AbortController();
-    const timeout = controller ? setTimeout(() => controller.abort(), this.requestTimeoutMs) : null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     const url = `${this.baseUrl}${path}`;
     const init = {
       method,
@@ -153,10 +178,10 @@ export class QoderClient {
         authorization: `Bearer ${this.accessToken}`,
         ...headers,
       },
-      signal: signal || controller?.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
     };
     if (body !== undefined) {
-      init.headers['content-type'] = 'application/json';
+      init.headers["content-type"] = "application/json";
       init.body = JSON.stringify(body);
     }
 
@@ -164,15 +189,15 @@ export class QoderClient {
     try {
       response = await this.fetch(url, init);
     } finally {
-      if (timeout) clearTimeout(timeout);
+      clearTimeout(timeout);
     }
 
     if (!response.ok) {
-      let details = '';
+      let details = "";
       try {
         details = await response.text();
       } catch {
-        details = response.statusText || '';
+        details = response.statusText || "";
       }
       throw new Error(`Qoder HTTP ${response.status}: ${details.slice(0, 500)}`);
     }
