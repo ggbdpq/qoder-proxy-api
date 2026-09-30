@@ -1,5 +1,7 @@
 # qoder-proxy-api
 
+[![CI](https://github.com/ggbdpq/qoder-proxy-api/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/ggbdpq/qoder-proxy-api/actions/workflows/ci.yml) ![Node](https://img.shields.io/badge/node-%E2%89%A524.21-339933?logo=node.js&logoColor=white) ![dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+
 `qoder-proxy-api` 是一个本地多 Provider 协议兼容层：下游暴露 OpenAI / Anthropic 风格接口，上游支持三条互相隔离的 Qoder 链路。
 
 ```
@@ -18,6 +20,16 @@ OpenAI Chat / Responses / Anthropic Messages
 > **定位声明**：本项目为个人**学习研究**用途。Gateway / CLI 链路涉及客户端私有协议，
 > 行为随官方客户端升级可能失效；与 Qoder 官方无任何关联。请遵守 Qoder 服务条款，
 > 自行保管令牌。不实现账号池、额度共享或限流绕过。
+
+## Quick Demo（无凭证，30 秒）
+
+```bash
+pnpm install && pnpm demo
+```
+
+三条 Provider 链路的上游替换为本地 fake（复用 `test/fixtures` 的真实 SSE 抓包），
+server、协议序列化与模型路由走的都是生产代码路径；运行后自动向三个下游端点
+各发一路流式请求并原样打印 wire。不需要 Qoder 账号，不需要任何 API Key。
 
 ## 三条 Provider 链路
 
@@ -142,25 +154,13 @@ $env:QODER_MODEL_ROUTES='{
 规则：显式路由优先；未命中的模型名直通**默认 provider**（由其模型解析器裁决，
 未知即 400 `unknown model`）。这是路由策略而非故障切换——任何上游失败都会原样报错。
 
-## Quick Demo（无凭证）
-
-```bash
-pnpm demo
-```
-
-三条 Provider 链路的上游替换为本地 fake（复用 `test/fixtures` 的真实 SSE 抓包），
-server、协议序列化与模型路由走的都是生产代码路径。运行后自动向
-`/v1/chat/completions`（gateway）、`/v1/responses`（cli）、`/v1/messages`（cloudAgents）
-各发一路流式请求并原样打印 wire，结尾附上游交互统计。
-不需要 Qoder 账号，不需要任何 API Key。
-
 ## 测试
 
-```powershell
-npm test
+```bash
+pnpm test
 ```
 
-82 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
+86 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
 协议 golden、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、
 非零退出）、Gateway codec 与 Python 参考实现的差分 golden。
 真实凭证的 live 测试未内置；接真实网关前请先抓包核对 fixtures。
