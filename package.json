@@ -1,6 +1,6 @@
 {
   "name": "qoder-proxy-api",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Local protocol gateway exposing OpenAI/Anthropic-compatible APIs over three Qoder providers (gateway / cli / cloud-agents).",
   "license": "MIT",
