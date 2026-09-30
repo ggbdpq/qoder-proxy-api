@@ -21,15 +21,17 @@ OpenAI Chat / Responses / Anthropic Messages
 
 ## 三条 Provider 链路
 
-| | `gateway`（默认） | `cli` | `cloudAgents` |
-|---|---|---|---|
-| 上游 | Qoder Client Gateway 私有协议 | 本地 `qodercli` 子进程 | Cloud Agents 官方 API |
-| 认证 | `QODER_GATEWAY_PAT` → jobToken → Bearer | 复用 `qodercli login` 登录态 | `QODER_ACCESS_TOKEN`（PAT/SAT） |
-| 流式 | SSE（原生） | stream-json（JSONL） | SSE |
-| Tools | OpenAI 风格原生通道（未真机验证） | 显式不支持 | 显式不支持 |
-| Thinking | `reasoning_content`（未真机验证） | reasoning part | 显式不支持 |
-| 模型 | 动态目录 + 兜底表 | CLI model level | `QODER_MODEL_MAP` 别名 |
-| 成熟度 | **实验性**（逆向协议，随时漂移） | 依赖本机 CLI 版本 | 已验证（v0.1 起） |
+|          | `gateway`（默认）                       | `cli`                        | `cloudAgents`                   |
+| -------- | --------------------------------------- | ---------------------------- | ------------------------------- |
+| 上游     | Qoder Client Gateway 私有协议           | 本地 `qodercli` 子进程       | Cloud Agents 官方 API           |
+| 认证     | `QODER_GATEWAY_PAT` → jobToken → Bearer | 复用 `qodercli login` 登录态 | `QODER_ACCESS_TOKEN`（PAT/SAT） |
+| 流式     | SSE（原生）                             | stream-json（JSONL）         | SSE                             |
+| Tools    | OpenAI 风格原生通道（未真机验证）       | 显式不支持                   | 显式不支持                      |
+| Thinking | `reasoning_content`（未真机验证）       | reasoning part               | 显式不支持                      |
+| 模型     | 动态目录 + 兜底表                       | CLI model level              | `QODER_MODEL_MAP` 别名          |
+| 成熟度   | **实验性**（逆向协议，随时漂移）        | 依赖本机 CLI 版本            | 已验证（v0.1 起）               |
+
+各能力的验证分级（verified / fixture verified / experimental / unverified）与证据口径见 [docs/06-测试与验证矩阵](docs/06-测试与验证矩阵.md)。
 
 三条链路的账号体系、额度来源、模型语义完全隔离：**没有 Provider 自动 fallback**，失败直接返回清晰错误。
 
@@ -41,9 +43,9 @@ npm run start:cli            # qodercli 子进程
 npm run start:cloud-agents   # Cloud Agents（v0.1 已验证路径）
 
 # 等价 CLI：
-node src/index.js --provider=gateway
-node src/index.js --provider=cli
-node src/index.js --provider=cloud-agents   # 兼容 cloudAgents 写法
+node src/index.ts --provider=gateway
+node src/index.ts --provider=cli
+node src/index.ts --provider=cloud-agents   # 兼容 cloudAgents 写法
 ```
 
 默认监听 `http://127.0.0.1:8320`（只绑定 loopback，可用 `HOST`/`PORT` 覆盖）。
@@ -140,13 +142,25 @@ $env:QODER_MODEL_ROUTES='{
 规则：显式路由优先；未命中的模型名直通**默认 provider**（由其模型解析器裁决，
 未知即 400 `unknown model`）。这是路由策略而非故障切换——任何上游失败都会原样报错。
 
+## Quick Demo（无凭证）
+
+```bash
+pnpm demo
+```
+
+三条 Provider 链路的上游替换为本地 fake（复用 `test/fixtures` 的真实 SSE 抓包），
+server、协议序列化与模型路由走的都是生产代码路径。运行后自动向
+`/v1/chat/completions`（gateway）、`/v1/responses`（cli）、`/v1/messages`（cloudAgents）
+各发一路流式请求并原样打印 wire，结尾附上游交互统计。
+不需要 Qoder 账号，不需要任何 API Key。
+
 ## 测试
 
 ```powershell
 npm test
 ```
 
-86+ 用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
+82 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
 协议 golden、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、
 非零退出）、Gateway codec 与 Python 参考实现的差分 golden。
 真实凭证的 live 测试未内置；接真实网关前请先抓包核对 fixtures。
@@ -155,7 +169,7 @@ npm test
 
 ```
 src/
-├── index.js / bootstrap.js      启动与 Provider 组装
+├── index.ts / bootstrap.ts      启动与 Provider 组装（TypeScript，Node 24 原生 type stripping）
 ├── core/                        Canonical Request/Event、Provider Contract、聚合、能力协商、错误码
 ├── protocols/openai/            Chat / Responses / 请求转换 / 流式 wire
 ├── protocols/anthropic/         Messages / 请求转换 / 流式 wire
@@ -169,6 +183,8 @@ src/
 依赖方向硬约束：`protocols` 不依赖 `providers`；`providers` 不依赖 `protocols`；
 `routing` 只认识 core contract；Provider 私有协议细节不离开各自目录。
 runtime dependencies 为零（仅 Node 24 标准库）。
+架构、协议适配、路由语义与能力验证分级的完整文档见 docs/00-07（v0.2.2 校准）。
+提交与分支约定见 docs/07。
 
 ## License
 
