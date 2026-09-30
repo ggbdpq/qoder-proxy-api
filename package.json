@@ -2,21 +2,33 @@
   "name": "qoder-proxy-api",
   "version": "0.2.0",
   "private": true,
-  "type": "module",
   "description": "Local protocol gateway exposing OpenAI/Anthropic-compatible APIs over three Qoder providers (gateway / cli / cloud-agents).",
+  "license": "MIT",
   "bin": {
-    "qoder-proxy-api": "./src/index.js"
+    "qoder-proxy-api": "./src/index.ts"
   },
+  "type": "module",
   "scripts": {
-    "start": "node ./src/index.js --provider=gateway",
-    "start:cli": "node ./src/index.js --provider=cli",
-    "start:cloud-agents": "node ./src/index.js --provider=cloud-agents",
+    "start": "node ./src/index.ts --provider=gateway",
+    "start:cli": "node ./src/index.ts --provider=cli",
+    "start:cloud-agents": "node ./src/index.ts --provider=cloud-agents",
     "test": "node --test",
-    "setup:cloudAgents": "node ./scripts/setupCloudAgents.mjs",
-    "doctor": "node ./scripts/doctor.mjs"
+    "demo": "node ./scripts/demo.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "setup:cloudAgents": "node ./scripts/setupCloudAgents.ts",
+    "doctor": "node ./scripts/doctor.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.21.0"
   },
-  "license": "UNLICENSED"
+  "packageManager": "pnpm@12.6.0"
 }

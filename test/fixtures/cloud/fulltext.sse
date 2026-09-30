@@ -1,0 +1,9 @@
+event: session.status_running
+data: {"type":"session.status_running"}
+
+event: agent.message
+data: {"type":"agent.message","message":{"content":[{"type":"text","text":"full text answer"}]}}
+
+event: session.status_idle
+data: {"type":"session.status_idle"}
+

@@ -1,0 +1,9 @@
+event: session.status_running
+data: {"type":"session.status_running"}
+
+event: agent.message.delta
+data: not-json{{{
+
+event: session.status_idle
+data: {"type":"session.status_idle"}
+

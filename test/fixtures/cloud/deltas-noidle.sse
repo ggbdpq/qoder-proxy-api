@@ -1,0 +1,6 @@
+event: session.status_running
+data: {"type":"session.status_running"}
+
+event: agent.message.delta
+data: {"delta":{"text":"Hello"}}
+

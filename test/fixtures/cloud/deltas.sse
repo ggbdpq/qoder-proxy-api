@@ -1,0 +1,12 @@
+event: session.status_running
+data: {"type":"session.status_running"}
+
+event: agent.message.delta
+data: {"delta":{"text":"Hello"}}
+
+event: agent.message.delta
+data: {"delta":{"text":", world"}}
+
+event: session.status_idle
+data: {"type":"session.status_idle"}
+

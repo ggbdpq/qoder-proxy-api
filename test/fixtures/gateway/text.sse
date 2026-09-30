@@ -1,0 +1,4 @@
+event: SSE
+data: {"body":"{\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"Hel\"}}]}","statusCodeValue":200,"statusCode":"OK"}
+data: {"body":"{\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}","statusCodeValue":200,"statusCode":"OK"}
+data: {"body":"{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}","statusCodeValue":200,"statusCode":"OK"}

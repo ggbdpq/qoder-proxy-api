@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck（tsc --noEmit，strict）
+        run: pnpm typecheck
+      - name: Lint（oxlint，0 警告基线）
+        run: pnpm lint
+      - name: Format check（oxfmt）
+        run: pnpm format:check
+      - name: Architecture check（目录依赖方向硬约束）
+        run: node scripts/architectureCheck.ts
+      - name: Tests
+        run: pnpm test

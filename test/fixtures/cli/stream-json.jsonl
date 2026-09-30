@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"abc"}
+{"type":"assistant","message":{"content":[{"type":"reasoning","thinking":"need a greeting"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"},{"type":"text","text":", CLI"}]}}
+{"type":"result","done":true}

@@ -1,0 +1,2 @@
+data:{"headers":{"Content-Type":["application/json"]},"body":"{\"id\":\"chatcmpl-8dfaf6e2-504a-9b97-821a-44e57bf2be27\",\"model\":\"auto\"}","statusCodeValue":200,"statusCode":"OK"}
+data:{"firstTokenDuration":594,"totalDuration":598,"serverDuration":108}
