@@ -75,3 +75,20 @@ running 事件门控、全文 `agent.message` 事件去重、idle 事件结束�
 `archiveEphemeralSessions` 决定是否归档。模型必须命中 `QODER_MODEL_MAP`
 （别名 → `{modelId, agentId, environmentId, agentVersion?}`），未命中 →
 `MODEL_NOT_FOUND`。
+
+## 环境变量速查（全表）
+
+| 变量                                                                                      | 链路        | 说明                                    |
+| ----------------------------------------------------------------------------------------- | ----------- | --------------------------------------- |
+| `QODER_GATEWAY_PAT`                                                                       | gateway     | 必填，缺失启动 fail fast                |
+| `QODER_GATEWAY_REGION`                                                                    | gateway     | 目前仅 `cn`                             |
+| `QODER_GATEWAY_MODEL_CACHE_TTL_MS`                                                        | gateway     | 目录缓存 TTL（默认 600000）             |
+| `QODER_GATEWAY_DEFAULT_MODEL`                                                             | gateway     | 兜底模型 key                            |
+| `QODER_CLI_BIN` / `QODER_CLI_NODE`                                                        | cli         | 子进程入口与解释器（Windows shim 见下） |
+| `QODER_CLI_MODEL` / `QODER_CLI_WORKSPACE` / `QODER_CLI_TIMEOUT_MS`                        | cli         | 模型 / 工作区 / 超时                    |
+| `QODER_ACCESS_TOKEN`                                                                      | cloudAgents | PAT/SAT                                 |
+| `QODER_AGENT_ID` / `QODER_ENVIRONMENT_ID` / `QODER_AGENT_VERSION`                         | cloudAgents | 单模型快捷配置                          |
+| `QODER_MODEL_MAP`（JSON）                                                                 | cloudAgents | 多模型别名表                            |
+| `QODER_MODEL_ROUTES`（JSON）                                                              | 路由        | 显式路由（见 docs/04）                  |
+| `QODER_ARCHIVE_EPHEMERAL`                                                                 | cloudAgents | ephemeral 会话归档开关                  |
+| `QODER_API_BASE_URL` / `QODER_DEFAULT_PROVIDER` / `QODER_PROXY_API_KEY` / `HOST` / `PORT` | 全局        | 基址 / 默认链路 / 下游鉴权 / 监听       |

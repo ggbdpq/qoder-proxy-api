@@ -2,9 +2,21 @@
 
 [![CI](https://github.com/ggbdpq/qoder-proxy-api/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/ggbdpq/qoder-proxy-api/actions/workflows/ci.yml) ![Node](https://img.shields.io/badge/node-%E2%89%A524.21-339933?logo=node.js&logoColor=white) ![dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
-`qoder-proxy-api` 是一个本地多 Provider 协议兼容层：下游暴露 OpenAI / Anthropic 风格接口，上游支持三条互相隔离的 Qoder 链路。
+本地多 Provider 协议网关：下游暴露 OpenAI Chat / Responses 与 Anthropic Messages 兼容 API（支持流式），上游适配三条互相隔离的 Qoder 链路。
 
-```
+> **定位声明**：个人学习研究用途。Gateway / CLI 链路涉及客户端私有协议，行为随官方客户端升级可能失效；与 Qoder 官方无任何关联。请遵守 Qoder 服务条款，自行保管令牌。不实现账号池、额度共享或限流绕过。
+
+## What is qoder-proxy-api
+
+它解决的问题：**把三个异构的 Qoder 上游统一成一套标准的 OpenAI / Anthropic 兼容 API**，让 Claude Code、CC Switch、OpenAI SDK 等客户端无需感知上游差异。
+
+- 下游协议 ↔ 内部语言 ↔ 上游 Provider 三层解耦：协议适配器只消费 Canonical Event，Provider 适配器只产出 Canonical Event，两者互不感知（依赖方向由 CI 强制）。
+- 显式模型路由是唯一路由策略：别名 → `{ provider, model }`，未命中直通默认 Provider；**没有自动 fallback**，任何上游失败原样报错。
+- 全部离线可验证：89 个测试、fake 上游、无凭证 demo。
+
+## Architecture
+
+```text
 OpenAI Chat / Responses / Anthropic Messages
             │  协议适配器（只消费 Canonical Event）
             ▼
@@ -12,14 +24,15 @@ OpenAI Chat / Responses / Anthropic Messages
             │
             ▼
      Provider Registry + 显式模型路由
-      /           |            \
-  Gateway      CLI        Cloud Agents
+      /           |              Gateway      CLI        Cloud Agents
 （默认）   （qodercli 子进程）  （官方 PAT + Cloud API）
 ```
 
-> **定位声明**：本项目为个人**学习研究**用途。Gateway / CLI 链路涉及客户端私有协议，
-> 行为随官方客户端升级可能失效；与 Qoder 官方无任何关联。请遵守 Qoder 服务条款，
-> 自行保管令牌。不实现账号池、额度共享或限流绕过。
+### Design Decisions
+
+- **为什么需要 Canonical Contract，而不是做三个直接转换器？** 三个上游的事件形状、认证方式、错误语义完全不同；先归一到 Canonical Event，下游序列化器只需消费一种语言，新增 Provider 时也不碰协议层（adapter boundary 由 `scripts/architectureCheck.ts` 在 CI 强制）。
+- **别人如何确认没有伪造兼容？** 协议形状由 characterization golden 与 provider 合同套件锁定，fixtures 是真实 SSE 抓包，`pnpm test` 离线可复现；每个能力声明的证据指针见 [docs/06-测试与验证矩阵](docs/06-测试与验证矩阵.md)。
+- **未来增加第四 Provider 怎么做？** 实现 `QoderProvider` 合同（capabilities / listModels / stream），注册进 Registry，加一条显式路由——协议层与 server 层零改动。Provider 私有协议细节不离开各自目录。
 
 ## Quick Demo（无凭证，30 秒）
 
@@ -27,11 +40,9 @@ OpenAI Chat / Responses / Anthropic Messages
 pnpm install && pnpm demo
 ```
 
-三条 Provider 链路的上游替换为本地 fake（复用 `test/fixtures` 的真实 SSE 抓包），
-server、协议序列化与模型路由走的都是生产代码路径；运行后自动向三个下游端点
-各发一路流式请求并原样打印 wire。不需要 Qoder 账号，不需要任何 API Key。
+三条链路的上游替换为本地 fake（复用 `test/fixtures` 的真实 SSE 抓包），server、协议序列化与模型路由走的都是生产代码路径；自动向三个下游端点各发一路流式请求并原样打印 wire。不需要 Qoder 账号，不需要任何 API Key。
 
-## 三条 Provider 链路
+## Compatibility Matrix
 
 |          | `gateway`（默认）                       | `cli`                        | `cloudAgents`                   |
 | -------- | --------------------------------------- | ---------------------------- | ------------------------------- |
@@ -43,24 +54,7 @@ server、协议序列化与模型路由走的都是生产代码路径；运行�
 | 模型     | 动态目录 + 兜底表                       | CLI model level              | `QODER_MODEL_MAP` 别名          |
 | 成熟度   | **实验性**（逆向协议，随时漂移）        | 依赖本机 CLI 版本            | 已验证（v0.1 起）               |
 
-各能力的验证分级（verified / fixture verified / experimental / unverified）与证据口径见 [docs/06-测试与验证矩阵](docs/06-测试与验证矩阵.md)。
-
-三条链路的账号体系、额度来源、模型语义完全隔离：**没有 Provider 自动 fallback**，失败直接返回清晰错误。
-
-## 启动方式
-
-```powershell
-npm start                    # gateway（默认；需要 QODER_GATEWAY_PAT）
-npm run start:cli            # qodercli 子进程
-npm run start:cloud-agents   # Cloud Agents（v0.1 已验证路径）
-
-# 等价 CLI：
-node src/index.ts --provider=gateway
-node src/index.ts --provider=cli
-node src/index.ts --provider=cloud-agents   # 兼容 cloudAgents 写法
-```
-
-默认监听 `http://127.0.0.1:8320`（只绑定 loopback，可用 `HOST`/`PORT` 覆盖）。
+各能力的验证分级（verified / fixture verified / experimental / unverified）与逐格证据索引见 [docs/06-测试与验证矩阵](docs/06-测试与验证矩阵.md)。三条链路的账号体系、额度来源、模型语义完全隔离：**没有 Provider 自动 fallback**，失败直接返回清晰错误。
 
 ## 下游接口（三条链路共用）
 
@@ -70,121 +64,55 @@ node src/index.ts --provider=cloud-agents   # 兼容 cloudAgents 写法
 - `POST /v1/messages`：Anthropic Messages，供 CC Switch / Claude Code 使用。
 - `GET /health`：脱敏配置预览（不出 secret）。
 
-鉴权：配置了 `PROXY_API_KEY` 时，下游请求必须带 `Authorization: Bearer <key>`。
-`PROXY_API_KEY` 与 Qoder 凭证永久分离，互不复用。
+鉴权：配置了 `PROXY_API_KEY` 时，下游请求必须带 `Authorization: Bearer <key>`。`PROXY_API_KEY` 与 Qoder 凭证永久分离，互不复用。
 
-## Gateway 链路配置
+## 运行与配置
 
-```powershell
-$env:QODER_GATEWAY_PAT = "qoder_pat_xxx"   # 必填，缺失时启动即 fail fast
-$env:QODER_GATEWAY_REGION = "cn"           # 目前仅 cn 端点
-# $env:QODER_GATEWAY_MODEL_CACHE_TTL_MS = "600000"
-npm start
+```bash
+npm start                    # gateway（默认；需要 QODER_GATEWAY_PAT）
+npm run start:cli            # qodercli 子进程
+npm run start:cloud-agents   # Cloud Agents
 ```
 
-模型名可直接用动态目录里的 display name（如 `Qwen3.7-Max`、`Qwen3.7-Plus`），
-缺省 `default` 走目录里的 `is_default` 项。
+默认监听 `http://127.0.0.1:8320`（只绑定 loopback，`HOST`/`PORT` 可覆盖）。
 
-**实验性声明**：Gateway 协议来自公开协议参考实现的独立移植，
-本机仅完成协议形状级验证（假上游 + 差分 golden），未经真实账号端到端验证。
-tools / thinking / vision 的能力声明以参考实现为准，协议漂移时首先怀疑这三项。
-
-## CLI 链路配置
-
-```powershell
-# 前置：qodercli 已安装并 qodercli login
-$env:QODER_CLI_BIN = "qodercli"            # 或指向真实 node 入口
-# $env:QODER_CLI_NODE = "node"             # QODER_CLI_BIN 是 .js/.mjs 时指定解释器
-# $env:QODER_CLI_MODEL = "ultimate"
-# $env:QODER_CLI_TIMEOUT_MS = "600000"
-npm run start:cli
-```
-
-- 每次请求一个独立子进程（`qodercli -p <prompt> -q -f stream-json`），不经 shell。
-- 多轮上下文由请求 messages 显式重放为 prompt。
-- 客户端断开或超时会终止子进程（SIGTERM → SIGKILL 升级）。
-- Windows 下 npm `.cmd` shim 无法无 shell 启动（Node 安全策略），代理**有意不降级到 shell**：
-  把 `QODER_CLI_BIN` 指向包内真实 `cli.js` 入口并用 `QODER_CLI_NODE` 指定 node。
-
-## Cloud Agents 链路配置
-
-```powershell
-$env:QODER_ACCESS_TOKEN = "qoder_pat_or_sat"
-$env:QODER_AGENT_ID = "agent_xxx"
-$env:QODER_ENVIRONMENT_ID = "env_xxx"
-$env:PROXY_API_KEY = "local-dev-key"
-npm run start:cloud-agents
-```
-
-或一次性初始化（自动创建 Environment / Agent 并写入 `.env`）：
-
-其他两条链路没有可自动创建的资源（gateway 的 PAT 要在 qoder.cn/account/integrations 手动创建；cli 直接用 `qodercli login` 登录态），可用 `npm run doctor` 一次性体检三条链路的配置状态：
-
-```powershell
-$env:QODER_ACCESS_TOKEN = "pt_xxx"
-npm run setup:cloudAgents
-Remove-Item Env:QODER_ACCESS_TOKEN
-npm run start:cloud-agents
-```
-
-多模型（`QODER_MODEL_MAP`，JSON）：
-
-```powershell
-$env:QODER_MODEL_MAP='{
-  "qoder-cc": {"agentId":"agent_xxx","environmentId":"env_xxx","agentVersion":1},
-  "qoder-coding": {"agentId":"agent_yyy","environmentId":"env_yyy"}
-}'
-```
-
-会话语义：`x-qoder-session-id` 头（或 `metadata.session_id` / `conversation_id`）复用上游
-Session（TTL 内）；无 key 的请求用完即归档（`QODER_ARCHIVE_EPHEMERAL=false` 关闭）。
+- **gateway**：`QODER_GATEWAY_PAT` 必填（缺失 fail fast）；模型名用动态目录 display name，缺省走 `is_default` 项。**实验性**：协议形状级验证（假上游 + 差分 golden），未真实账号端到端验证；协议漂移时首先怀疑 tools / thinking。
+- **cli**：前置 `qodercli login`；每次请求独立子进程，不经 shell；Windows npm shim 限制见 [docs/02-三-provider-链路](docs/02-三-provider-链路.md)。
+- **cloudAgents**：`QODER_ACCESS_TOKEN` + `QODER_AGENT_ID` + `QODER_ENVIRONMENT_ID`；`npm run setup:cloudAgents` 可自动初始化；多模型用 `QODER_MODEL_MAP`。会话复用与归档语义见 docs/02。
+- 环境变量全表与配置细节：[docs/02-三-provider-链路](docs/02-三-provider-链路.md)。
 
 ## 显式模型路由
 
-`QODER_MODEL_ROUTES`（JSON）把客户端可见别名显式指到某条链路：
-
-```powershell
-$env:QODER_MODEL_ROUTES='{
+```bash
+QODER_MODEL_ROUTES='{
   "qoder-cc":    {"provider": "cloudAgents", "model": "qoder-cc"},
   "qoder-cli-u": {"provider": "cli",         "model": "ultimate"},
   "qoder-qwen":  {"provider": "gateway",     "model": "Qwen3.7-Max"}
 }'
 ```
 
-规则：显式路由优先；未命中的模型名直通**默认 provider**（由其模型解析器裁决，
-未知即 400 `unknown model`）。这是路由策略而非故障切换——任何上游失败都会原样报错。
+规则与语义（含 server 层应用点）：[docs/04-模型路由](docs/04-模型路由.md)。
 
-## 测试
+## Testing
 
 ```bash
 pnpm test
 ```
 
-89 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
-协议 golden、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、
-非零退出）、Gateway codec 与 Python 参考实现的差分 golden。
-真实凭证的 live 测试未内置；接真实网关前请先抓包核对 fixtures。
+89 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、协议 golden、差分校验（codec 对 Python 参考实现、cloudAgents 对 legacy runTurn）、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、空 body、非零退出）、路由集成与对抗审查闭环。真实凭证的 live smoke 入口在 `test/live/gatewayLive.ts`（输出全程脱敏，默认不运行）。
 
-## 目录结构
+## Limitations
 
-```
-src/
-├── index.ts / bootstrap.ts      启动与 Provider 组装（TypeScript，Node 24 原生 type stripping）
-├── core/                        Canonical Request/Event、Provider Contract、聚合、能力协商、错误码
-├── protocols/openai/            Chat / Responses / 请求转换 / 流式 wire
-├── protocols/anthropic/         Messages / 请求转换 / 流式 wire
-├── routing/                     Provider Registry、显式模型路由
-├── server/                      HTTP 路由、SSE 写出、错误映射
-├── providers/gateway/           auth（jobToken/Bearer/刷新）、codec、models、client、normalize
-├── providers/cli/               process（spawn/abort/timeout）、streamParser、config
-└── providers/cloudAgents/       client、normalize、config、session store
-```
+- Gateway 全链路 **experimental**：协议逆向而来，随时漂移；tools / thinking 未真机验证。
+- 模型目录拉取失败静默兜底（可观测性缺口，已知）。
+- malformed SSE 的 raw-text 泄漏为 v0.1 已知 wart（characterization 锁定）。
+- 不实现：账号池、额度共享、限流绕过、多租户、数据库、Web 控制台。
 
-依赖方向硬约束：`protocols` 不依赖 `providers`；`providers` 不依赖 `protocols`；
-`routing` 只认识 core contract；Provider 私有协议细节不离开各自目录。
-runtime dependencies 为零（仅 Node 24 标准库）。
-架构、协议适配、路由语义与能力验证分级的完整文档见 docs/00-07（v0.2.2 校准）。
-提交与分支约定见 docs/07。
+完整分级与证据：[docs/06-测试与验证矩阵](docs/06-测试与验证矩阵.md)。
+
+## Docs
+
+架构、协议适配、路由语义、流与错误、验证矩阵、提交约定：[docs/00-架构总览](docs/00-架构总览与依赖方向.md) 起 8 篇（v0.2.2 校准）。版本变更史：[CHANGELOG](CHANGELOG.md)。提交与分支约定见 docs/07。
 
 ## License
 
