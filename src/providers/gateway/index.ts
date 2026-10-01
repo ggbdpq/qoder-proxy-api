@@ -297,9 +297,6 @@ function mapMessages(request: CanonicalRequest): GatewayWireMessage[] {
         response_meta: blankResponseMeta(),
         reasoning_content_signature: "",
       };
-      // CanonicalMessage 合同未声明 name（v0.1 透传字段）；按运行时原值透传。
-      const name = (message as { name?: string }).name;
-      if (name) entry.name = name;
       if (message.toolCallId) entry.tool_call_id = message.toolCallId;
       rebuilt.push(entry);
       continue;

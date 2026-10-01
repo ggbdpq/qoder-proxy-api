@@ -197,7 +197,13 @@ export class CloudAgentsClient {
 
     const decoder = new TextDecoder();
     let remainder = "";
-    for await (const chunk of response.body!) {
+    if (!response.body) {
+      throw new ProviderError(
+        ERROR_CODES.PROVIDER_PROTOCOL_ERROR,
+        "Qoder event stream returned an empty body",
+      );
+    }
+    for await (const chunk of response.body) {
       const { events, remainder: nextRemainder } = parseSseChunk(
         remainder,
         decoder.decode(chunk, { stream: true }),

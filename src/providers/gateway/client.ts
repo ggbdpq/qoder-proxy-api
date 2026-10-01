@@ -69,8 +69,15 @@ export class GatewayClient {
 
     const decoder = new TextDecoder();
     let remainder = "";
-    // ok 响应的 body 为已建立的流（stdio 契约保证非空）。
-    for await (const chunk of response.body!) {
+    // ok 响应的 body 应为已建立的流；上游异常返回空 body 时显式协议错误，
+    // 避免 for-await 抛无码 TypeError。
+    if (!response.body) {
+      throw new ProviderError(
+        ERROR_CODES.PROVIDER_PROTOCOL_ERROR,
+        "gateway chat stream returned an empty body",
+      );
+    }
+    for await (const chunk of response.body) {
       const text = remainder + decoder.decode(chunk, { stream: true });
       const lines = text.split(/\r?\n/);
       remainder = lines.pop() ?? "";

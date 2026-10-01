@@ -160,7 +160,7 @@ $env:QODER_MODEL_ROUTES='{
 pnpm test
 ```
 
-86 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
+89 个用例，全部离线：characterization（v0.1 行为冻结）、provider 合同套件、
 协议 golden、故障注入（上游 500/401、malformed SSE、流中错误、abort、超时、
 非零退出）、Gateway codec 与 Python 参考实现的差分 golden。
 真实凭证的 live 测试未内置；接真实网关前请先抓包核对 fixtures。

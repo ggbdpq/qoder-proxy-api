@@ -3,6 +3,18 @@
 格式参考 Keep a Changelog；版本序列规则见 `docs/07-提交与分支约定.md`
 （Phase x 收口 → v0.2.x）。
 
+## v0.2.4 — 2026-10-01
+
+对抗式审查闭环（Adversarial Review Loop）。
+
+- 认证回退失败统一错误通道：gateway refresh 被拒后的 cold-exchange
+  回退再失败时不再抛裸错误，统一 PROVIDER_AUTH_ERROR
+- 流响应空 body 显式化：gateway/cloud 事件流遇 200 空 body 时给出
+  PROVIDER_PROTOCOL_ERROR（实测 undici 空流场景为干净结束，null 场景由
+  显式检查兜底），测试锁定实测行为
+- 删除 gateway 消息映射的死代码（name 透传，合同未声明的字段）
+- docs/00 索引补 docs/07；测试数校准 89
+
 ## v0.2.2 — 2026-10-01
 
 Phase 2 · 验证矩阵与项目约定。

@@ -296,14 +296,19 @@ export class GatewayAuth {
       return this.session;
     } catch (error) {
       if (hasTokens) {
-        // refresh 被拒 → 回退 cold exchange 一次；再失败才算真实错误。
-        const jt = await this.exchangeJobToken({
-          refreshToken: "",
-          securityOauthToken: "",
-          needRefresh: false,
-        });
-        this.session = sessionFromJobToken(jt, this.machine);
-        return this.session;
+        // refresh 被拒 → 回退 cold exchange 一次；再失败才算真实错误，
+        // 且与首次交换走同一 AUTH 错误通道（调用方按 code 分流）。
+        try {
+          const jt = await this.exchangeJobToken({
+            refreshToken: "",
+            securityOauthToken: "",
+            needRefresh: false,
+          });
+          this.session = sessionFromJobToken(jt, this.machine);
+          return this.session;
+        } catch (fallbackError) {
+          throw toProviderAuthError(fallbackError);
+        }
       }
       throw toProviderAuthError(error);
     }
