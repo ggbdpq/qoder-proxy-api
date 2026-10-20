@@ -32,7 +32,7 @@ test("openai chat: system/developer 进 system 字段，roles 归一", () => {
   assert.equal(request.model, "cc");
 });
 
-test("openai chat: image_url 降级为占位文本（v0.1 语义）", () => {
+test("openai chat: image_url 保留为 image part", () => {
   const request = chatToCanonical(
     {
       messages: [
@@ -47,7 +47,10 @@ test("openai chat: image_url 降级为占位文本（v0.1 语义）", () => {
     },
     "cc",
   );
-  assert.equal(request.messages[0].content, "look\n[image: https://x.test/a.png]");
+  assert.deepEqual(request.messages[0].content, [
+    { type: "text", text: "look" },
+    { type: "image", url: "https://x.test/a.png" },
+  ]);
 });
 
 test("openai responses: 字符串与数组 input、instructions 进 system", () => {
@@ -75,7 +78,7 @@ test("openai responses: 字符串与数组 input、instructions 进 system", () 
   );
 });
 
-test("anthropic: system 字符串与 text 块进 canonical，非 text 块丢弃（v0.1 语义）", () => {
+test("anthropic: system 字符串与 text 块进 canonical，image 块保留", () => {
   const request = anthropicToCanonical(
     {
       system: "be terse",
@@ -97,7 +100,13 @@ test("anthropic: system 字符串与 text 块进 canonical，非 text 块丢弃�
   assert.deepEqual(
     request.messages.map((m) => [m.role, m.content]),
     [
-      ["user", "hello"],
+      [
+        "user",
+        [
+          { type: "text", text: "hello" },
+          { type: "image", data: "xxx" },
+        ],
+      ],
       ["assistant", "hi there"],
     ],
   );

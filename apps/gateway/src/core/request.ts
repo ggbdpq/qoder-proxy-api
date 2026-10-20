@@ -5,14 +5,56 @@
 export interface TextPart {
   type: "text";
   text: string;
+  providerExtras?: Record<string, unknown>;
 }
 
 export interface ImagePart {
   type: "image";
-  source: Record<string, unknown>;
+  mediaType?: string;
+  url?: string;
+  data?: string;
+  source?: Record<string, unknown>;
+  providerExtras?: Record<string, unknown>;
 }
 
-export type CanonicalContentPart = TextPart | ImagePart;
+export interface ToolCallPart {
+  type: "tool_call";
+  id: string;
+  name: string;
+  arguments: string;
+  providerExtras?: Record<string, unknown>;
+}
+
+export interface ToolResultPart {
+  type: "tool_result";
+  toolCallId: string;
+  content: string;
+  isError?: boolean;
+  providerExtras?: Record<string, unknown>;
+}
+
+export interface ThinkingPart {
+  type: "thinking";
+  text: string;
+  signature?: string;
+  providerExtras?: Record<string, unknown>;
+}
+
+export type CanonicalContentPart =
+  | TextPart
+  | ImagePart
+  | ToolCallPart
+  | ToolResultPart
+  | ThinkingPart;
+
+// 只读文本的 provider 用它取正文。纯文本消息的 content 仍是字符串，结果与直接读 content 相同。
+export function textOf(message: { content: string | CanonicalContentPart[] }): string {
+  if (typeof message.content === "string") return message.content;
+  return message.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+}
 
 export interface CanonicalToolCall {
   id: string;

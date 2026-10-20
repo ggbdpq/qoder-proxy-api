@@ -9,7 +9,7 @@ import type {
   CanonicalRequest,
   ProviderContext,
   CanonicalMessage,
-  TextPart,
+  ImagePart,
 } from "../../core/request.ts";
 import type { ProviderEvent } from "../../core/events.ts";
 import type { ProviderModel } from "../../core/provider.ts";
@@ -242,13 +242,15 @@ function blankResponseMeta(): GatewayResponseMeta {
 
 function messageText(message: CanonicalMessage): string {
   if (typeof message.content === "string") return message.content;
-  if (Array.isArray(message.content)) {
-    return message.content
-      .filter((part): part is TextPart => part?.type === "text" && typeof part.text === "string")
-      .map((part) => part.text)
-      .join("\n");
-  }
-  return "";
+  if (!Array.isArray(message.content)) return "";
+  return message.content
+    .map((part) => {
+      if (part?.type === "text") return part.text;
+      if (part?.type === "tool_result") return part.content;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
 }
 
 function latestUserText(request: CanonicalRequest): string {
@@ -267,11 +269,18 @@ function collectImages(messages: CanonicalMessage[]): string[] {
     if (!Array.isArray(message.content)) continue;
     for (const part of message.content) {
       if (part?.type !== "image") continue;
-      const url = part.source?.url || part.source?.data;
-      if (typeof url === "string") urls.push(url);
+      const url = imageWireUrl(part);
+      if (url) urls.push(url);
     }
   }
   return urls;
+}
+
+function imageWireUrl(part: ImagePart): string {
+  if (part.url) return part.url;
+  if (part.data) return part.mediaType ? `data:${part.mediaType};base64,${part.data}` : part.data;
+  const legacy = part.source?.url ?? part.source?.data;
+  return typeof legacy === "string" ? legacy : "";
 }
 
 function mapMessages(request: CanonicalRequest): GatewayWireMessage[] {

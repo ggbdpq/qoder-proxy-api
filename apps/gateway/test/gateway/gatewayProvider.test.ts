@@ -196,6 +196,51 @@ test("gateway: chat request wire shape matches the protocol template", async () 
   }
 });
 
+test("gateway: image url/data 和 tool_result 正文进入上游请求", async () => {
+  const { provider, fake, close } = await startProvider();
+  try {
+    await aggregateStream(
+      provider.stream(
+        {
+          model: "Qwen3.7-Plus",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "look" },
+                { type: "image", url: "https://x.test/a.png" },
+                { type: "image", mediaType: "image/png", data: "xxx" },
+                { type: "image", source: { url: "https://x.test/legacy.png" } },
+              ],
+            },
+            {
+              role: "tool",
+              toolCallId: "call_1",
+              content: [{ type: "tool_result", toolCallId: "call_1", content: "sunny" }],
+            },
+          ],
+        },
+        ctx(),
+      ),
+    );
+    const { decode } = await import("../../src/providers/gateway/codec.ts");
+    const body = JSON.parse(decode(fake.state.chatRequests.at(-1)!.body).toString("utf8"));
+    assert.equal(body.model_config.is_vl, true);
+    assert.deepEqual(
+      body.messages[0].contents.map(
+        (part: { type: string; text?: string; image_url?: { url: string } }) =>
+          part.type === "text" ? part.text : part.image_url?.url,
+      ),
+      ["https://x.test/a.png", "data:image/png;base64,xxx", "https://x.test/legacy.png", "look"],
+    );
+    assert.equal(body.messages[1].role, "tool");
+    assert.equal(body.messages[1].content, "sunny");
+    assert.equal(body.messages[1].tool_call_id, "call_1");
+  } finally {
+    close();
+  }
+});
+
 test("gateway: model catalog falls back when endpoint fails", async () => {
   const { close } = await startProvider();
   try {
