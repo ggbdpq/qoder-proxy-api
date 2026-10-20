@@ -8,6 +8,8 @@ import type { QoderProvider } from "../../src/core/provider.ts";
 function fakeProvider(id: QoderProvider["id"]): QoderProvider {
   return {
     id,
+    kind: "openai-compatible",
+    label: id,
     capabilities() {
       return {
         streaming: true,

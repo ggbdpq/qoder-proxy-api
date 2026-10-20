@@ -29,6 +29,8 @@ import { extractEnvelopeDelta, extractEnvelopeUsage, parseEnvelope } from "./nor
 
 export class GatewayProvider {
   id = "gateway";
+  kind = "qoder-gateway" as const;
+  label = "Qoder Gateway";
 
   defaultModel: string;
   auth: GatewayAuth;

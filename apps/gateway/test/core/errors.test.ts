@@ -12,6 +12,15 @@ test("errors: ProviderError carries machine-readable code", () => {
   assert.equal(error instanceof Error, true);
 });
 
+test("errors: ProviderError carries retryAfterMs for rate limits", () => {
+  const error = new ProviderError("PROVIDER_RATE_LIMITED", "upstream 429", {
+    status: 429,
+    retryAfterMs: 2500,
+  });
+  assert.equal(error.retryAfterMs, 2500);
+  assert.equal(new ProviderError("PROVIDER_UNAVAILABLE", "down").retryAfterMs, undefined);
+});
+
 test("errors: canonical code set is closed", () => {
   assert.deepEqual(Object.keys(ERROR_CODES).sort(), [
     "MODEL_NOT_FOUND",
@@ -19,6 +28,7 @@ test("errors: canonical code set is closed", () => {
     "PROVIDER_AUTH_ERROR",
     "PROVIDER_PROTOCOL_ERROR",
     "PROVIDER_RATE_LIMITED",
+    "PROVIDER_REJECTED",
     "PROVIDER_TIMEOUT",
     "PROVIDER_UNAVAILABLE",
     "UNSUPPORTED_CAPABILITY",

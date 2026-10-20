@@ -1,0 +1,112 @@
+[
+  {
+    "type": "request.start",
+    "requestId": "req_a7841de8",
+    "at": 1792458754183,
+    "agent": "codex",
+    "alias": "group/daily",
+    "groupId": "daily",
+    "protocol": "chat",
+    "seq": 1
+  },
+  {
+    "type": "route.decision",
+    "requestId": "req_a7841de8",
+    "at": 1792458754184,
+    "strategy": "ordered",
+    "candidates": [
+      {
+        "providerId": "kimi",
+        "model": "kimi-k2",
+        "state": "ready",
+        "reason": "排在最前且可用"
+      },
+      {
+        "providerId": "deepseek",
+        "model": "deepseek-chat",
+        "state": "ready",
+        "reason": "备选 #2"
+      }
+    ],
+    "seq": 2
+  },
+  {
+    "type": "upstream.attempt",
+    "requestId": "req_a7841de8",
+    "at": 1792458754184,
+    "member": {
+      "providerId": "kimi",
+      "model": "kimi-k2"
+    },
+    "attempt": 1,
+    "seq": 3
+  },
+  {
+    "type": "upstream.failed",
+    "requestId": "req_a7841de8",
+    "at": 1792458754203,
+    "member": {
+      "providerId": "kimi",
+      "model": "kimi-k2"
+    },
+    "code": "PROVIDER_RATE_LIMITED",
+    "status": 429,
+    "restUntil": 1792458761203,
+    "reroutable": true,
+    "seq": 4
+  },
+  {
+    "type": "reroute",
+    "requestId": "req_a7841de8",
+    "at": 1792458754203,
+    "from": {
+      "providerId": "kimi",
+      "model": "kimi-k2"
+    },
+    "to": {
+      "providerId": "deepseek",
+      "model": "deepseek-chat"
+    },
+    "reason": "限流 · 7 秒后恢复",
+    "seq": 5
+  },
+  {
+    "type": "upstream.attempt",
+    "requestId": "req_a7841de8",
+    "at": 1792458754203,
+    "member": {
+      "providerId": "deepseek",
+      "model": "deepseek-chat"
+    },
+    "attempt": 2,
+    "seq": 6
+  },
+  {
+    "type": "upstream.firstByte",
+    "requestId": "req_a7841de8",
+    "at": 1792458754209,
+    "member": {
+      "providerId": "deepseek",
+      "model": "deepseek-chat"
+    },
+    "ms": 6,
+    "seq": 7
+  },
+  {
+    "type": "request.end",
+    "requestId": "req_a7841de8",
+    "at": 1792458754214,
+    "outcome": "ok",
+    "member": {
+      "providerId": "deepseek",
+      "model": "deepseek-chat"
+    },
+    "ms": 31,
+    "reroutes": 1,
+    "usage": {
+      "inputTokens": 12,
+      "outputTokens": 5
+    },
+    "seq": 8
+  }
+]

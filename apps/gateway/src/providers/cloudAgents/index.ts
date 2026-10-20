@@ -18,6 +18,8 @@ import {
 
 export class CloudAgentsProvider {
   id = "cloudAgents";
+  kind = "qoder-cloudAgents" as const;
+  label = "Qoder Cloud Agents";
 
   client: CloudAgentsClient;
   sessions: SessionStore;
