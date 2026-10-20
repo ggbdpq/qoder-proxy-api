@@ -15,6 +15,7 @@
     "test": "node --test",
     "demo": "node ./scripts/demo.ts",
     "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm lint && node ./scripts/architectureCheck.ts",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",

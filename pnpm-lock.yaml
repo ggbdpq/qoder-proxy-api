@@ -164,7 +164,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/gateway:
     devDependencies:
       '@types/node':
         specifier: ^24.19.0

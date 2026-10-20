@@ -1,0 +1,11 @@
+{
+  "name": "qoder-proxy-api-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -r test",
+    "check": "pnpm -r check",
+    "format:check": "pnpm -r format:check"
+  },
+  "packageManager": "pnpm@12.6.0"
+}
