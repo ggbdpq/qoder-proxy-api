@@ -11,7 +11,22 @@ export interface UsageSummary {
 export interface ChatChunkDelta {
   role?: string;
   content?: string;
+  reasoning_content?: string;
+  tool_calls?: Array<{
+    index: number;
+    id?: string;
+    type?: "function";
+    function: { name?: string; arguments: string };
+  }>;
 }
+
+// Canonical stopReason → OpenAI Chat finish_reason。
+export const FINISH_REASON = {
+  stop: "stop",
+  tool_use: "tool_calls",
+  length: "length",
+  cancelled: "stop",
+} as const;
 
 export interface ChatCompletionChunk {
   id: string;
@@ -44,35 +59,47 @@ export function responseCreated(id: string, model: string) {
   };
 }
 
-export function outputTextDelta(id: string, delta: string) {
+export function outputTextDelta(id: string, delta: string, outputIndex = 0) {
   return {
     type: "response.output_text.delta",
     response_id: id,
     item_id: `msg_${id}`,
-    output_index: 0,
+    output_index: outputIndex,
     content_index: 0,
     delta,
   };
 }
 
-export function outputTextDone(id: string) {
+export function outputTextDone(id: string, outputIndex = 0) {
   return {
     type: "response.output_text.done",
     response_id: id,
     item_id: `msg_${id}`,
-    output_index: 0,
+    output_index: outputIndex,
     content_index: 0,
   };
 }
 
-export function responseCompleted(id: string, model: string, usage?: UsageSummary) {
+// stopReason length → incomplete，其余 completed。
+export function responseStatus(stopReason?: string) {
+  return stopReason === "length"
+    ? { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }
+    : { status: "completed" };
+}
+
+export function responseCompleted(
+  id: string,
+  model: string,
+  usage?: UsageSummary,
+  stopReason?: string,
+) {
   const response: {
     id: string;
     object: string;
     status: string;
     model: string;
     usage?: { input_tokens: number; output_tokens: number; total_tokens: number };
-  } = { id, object: "response", status: "completed", model };
+  } = { id, object: "response", ...responseStatus(stopReason), model };
   if (usage) {
     const input = usage.inputTokens ?? 0;
     const output = usage.outputTokens ?? 0;
