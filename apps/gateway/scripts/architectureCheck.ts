@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 架构消融检查：目录依赖方向硬约束（一次性脚本，不入 npm scripts）。
+// 架构检查：目录依赖方向硬约束，违规时退出码非 0（pnpm check 的一部分）。
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,14 +22,23 @@ function zoneOf(absPath: string): string {
   if (norm.startsWith("providers")) return "providers";
   if (norm.startsWith("routing")) return "routing";
   if (norm.startsWith("server")) return "server";
+  if (norm.startsWith("admin")) return "admin";
   return "root";
 }
+
+// ADR-0007：数据面零依赖，zod 与 contracts 只给控制台和测试用。
+const forbiddenPackages = /^(zod|@qpa\/contracts)(\/|$)/;
 
 const violations = [];
 for (const file of walk(root)) {
   const from = zoneOf(file);
   const text = readFileSync(file, "utf8");
-  for (const m of text.matchAll(/from\s+["'](\.[^"']+)["']/g)) {
+  for (const m of text.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+    if (forbiddenPackages.test(m[1])) {
+      violations.push(`[gateway→${m[1]}] ${path.relative(root, file)}`);
+      continue;
+    }
+    if (!m[1].startsWith(".")) continue;
     const target = path.resolve(path.dirname(file), m[1]);
     const to = zoneOf(target);
     if (from === "protocols" && to === "providers")
@@ -40,6 +49,12 @@ for (const file of walk(root)) {
       violations.push(`[core→${to}] ${path.relative(root, file)} -> ${m[1]}`);
     if (from === "routing" && ["providers", "protocols"].includes(to))
       violations.push(`[routing→${to}] ${path.relative(root, file)} -> ${m[1]}`);
+    if (
+      from === "admin" &&
+      to === "providers" &&
+      !/^providers\/[^/]+\/index\.ts$/.test(path.relative(root, target).split(path.sep).join("/"))
+    )
+      violations.push(`[admin→providers internals] ${path.relative(root, file)} -> ${m[1]}`);
   }
 }
 
@@ -64,3 +79,4 @@ for (const rel of ["server/server.ts", "server/http.ts", "server/sse.ts"]) {
   }
 }
 console.log(leaks.length ? leaks.join("\n") : "NO PROTOCOL DETAIL LEAKS IN SERVER");
+if (violations.length || leaks.length) process.exitCode = 1;

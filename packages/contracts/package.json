@@ -1,0 +1,23 @@
+{
+  "name": "@qpa/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Admin API 与路由事件的 zod schema。只给控制台、playground 和测试用，网关不得引用（ADR-0007）。",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "tsc --noEmit",
+    "format:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "oxfmt": "^0.70.0",
+    "typescript": "^5.9.3"
+  }
+}

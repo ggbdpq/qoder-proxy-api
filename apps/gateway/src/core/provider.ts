@@ -12,13 +12,24 @@ export interface ProviderModel {
   label?: string;
 }
 
-export interface QoderProvider {
-  id: "gateway" | "cli" | "cloudAgents";
+export type ProviderKind =
+  | "qoder-gateway"
+  | "qoder-cli"
+  | "qoder-cloudAgents"
+  | "openai-compatible"
+  | "anthropic-compatible";
+
+export interface GatewayProvider {
+  id: string;
+  kind: ProviderKind;
+  label: string;
   capabilities: () => ProviderCapabilities | Promise<ProviderCapabilities>;
   listModels: () => Promise<ProviderModel[]>;
   stream: (request: CanonicalRequest, context: ProviderContext) => AsyncIterable<ProviderEvent>;
   dispose?: () => Promise<void>;
 }
+
+export type QoderProvider = GatewayProvider;
 
 // 注册期校验：缺方法或缺能力键直接 fail fast，不让坏 Provider 进入路由。
 export function assertProvider(provider: QoderProvider): QoderProvider {

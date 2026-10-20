@@ -15,6 +15,8 @@ import { parseJsonlOutput, runCliProcess } from "./process.ts";
 
 export class CliProvider {
   id = "cli";
+  kind = "qoder-cli" as const;
+  label = "Qoder CLI";
 
   config: CliConfig;
   // 模型别名 → CLI model level（如 ultimate）；未配置时原样传递。
