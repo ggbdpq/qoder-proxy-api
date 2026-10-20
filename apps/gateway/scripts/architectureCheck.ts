@@ -26,19 +26,24 @@ function zoneOf(absPath: string): string {
   return "root";
 }
 
-// ADR-0007：数据面零依赖，zod 与 contracts 只给控制台和测试用。
-const forbiddenPackages = /^(zod|@qpa\/contracts)(\/|$)/;
-
 const violations = [];
+
+// ADR-0007：数据面零运行时依赖。src 只能 import node: 内置模块和相对路径（zod、@qpa/contracts 同样被拒）。
+const { dependencies = {} } = JSON.parse(
+  readFileSync(path.join(root, "..", "package.json"), "utf8"),
+);
+for (const name of Object.keys(dependencies))
+  violations.push(`[gateway dependencies] package.json declares "${name}"`);
+
 for (const file of walk(root)) {
   const from = zoneOf(file);
   const text = readFileSync(file, "utf8");
   for (const m of text.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
-    if (forbiddenPackages.test(m[1])) {
+    if (m[1].startsWith("node:")) continue;
+    if (!m[1].startsWith(".")) {
       violations.push(`[gateway→${m[1]}] ${path.relative(root, file)}`);
       continue;
     }
-    if (!m[1].startsWith(".")) continue;
     const target = path.resolve(path.dirname(file), m[1]);
     const to = zoneOf(target);
     if (from === "protocols" && to === "providers")

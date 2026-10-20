@@ -1,8 +1,9 @@
 // Admin API 与路由事件契约（02-接口契约 §2–§4、§7）。网关侧手写校验，不引用本包（ADR-0007）；
 // 两边一致靠契约测试：网关产出的真实响应 / 事件必须能被这里的 schema parse。
+// 对象一律 strict：契约外字段（prompt、Key、漂移出来的新字段）直接 parse 失败，而不是被静默剥掉。
 import { z } from "zod";
 
-export const MemberRef = z.object({ providerId: z.string(), model: z.string() });
+export const MemberRef = z.strictObject({ providerId: z.string(), model: z.string() });
 export type MemberRef = z.infer<typeof MemberRef>;
 
 export const keyOf = (m: MemberRef) => `${m.providerId}/${m.model}`;
@@ -10,7 +11,7 @@ export const keyOf = (m: MemberRef) => `${m.providerId}/${m.model}`;
 const base = { requestId: z.string(), at: z.number(), seq: z.number().optional() };
 
 export const RouteEvent = z.discriminatedUnion("type", [
-  z.object({
+  z.strictObject({
     type: z.literal("request.start"),
     ...base,
     agent: z.string(),
@@ -18,7 +19,7 @@ export const RouteEvent = z.discriminatedUnion("type", [
     groupId: z.string().nullable(),
     protocol: z.string(),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("route.decision"),
     ...base,
     strategy: z.enum(["ordered", "smart", "direct"]),
@@ -30,14 +31,19 @@ export const RouteEvent = z.discriminatedUnion("type", [
       }),
     ),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("upstream.attempt"),
     ...base,
     member: MemberRef,
     attempt: z.number(),
   }),
-  z.object({ type: z.literal("upstream.firstByte"), ...base, member: MemberRef, ms: z.number() }),
-  z.object({
+  z.strictObject({
+    type: z.literal("upstream.firstByte"),
+    ...base,
+    member: MemberRef,
+    ms: z.number(),
+  }),
+  z.strictObject({
     type: z.literal("upstream.failed"),
     ...base,
     member: MemberRef,
@@ -46,14 +52,14 @@ export const RouteEvent = z.discriminatedUnion("type", [
     restUntil: z.number().optional(),
     reroutable: z.boolean(),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("reroute"),
     ...base,
     from: MemberRef,
     to: MemberRef,
     reason: z.string(),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("request.end"),
     ...base,
     outcome: z.enum(["ok", "error", "cancelled"]),
@@ -68,7 +74,7 @@ export const RouteEvent = z.discriminatedUnion("type", [
 ]);
 export type RouteEvent = z.infer<typeof RouteEvent>;
 
-export const RouteGroup = z.object({
+export const RouteGroup = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "只能用小写字母、数字和 -，最长 40"),
   name: z.string().min(1, "起个名字"),
   strategy: z.enum(["ordered", "smart"]),
@@ -89,14 +95,14 @@ export const ProviderKind = z.enum([
   "anthropic-compatible",
 ]);
 
-export const Provider = z.object({
+export const Provider = z.strictObject({
   id: z.string(),
   kind: ProviderKind,
   label: z.string(),
   baseUrl: z.string().optional(),
   keyHint: z.string().optional(), // Key 只写不读，只回末 4 位
   models: z.array(z.string()),
-  capabilities: z.object({ tools: z.boolean(), vision: z.boolean(), thinking: z.boolean() }),
+  capabilities: z.strictObject({ tools: z.boolean(), vision: z.boolean(), thinking: z.boolean() }),
   firstByteTimeoutMs: z.number().optional(),
   enabled: z.boolean(),
   source: z.literal("env").optional(), // 来自环境变量的条目只读
@@ -105,7 +111,7 @@ export type Provider = z.infer<typeof Provider>;
 
 export const AgentId = z.enum(["claude-code", "codex", "opencode"]);
 
-export const AgentIntegration = z.object({
+export const AgentIntegration = z.strictObject({
   id: AgentId,
   installed: z.boolean(),
   configPath: z.string(),
@@ -115,7 +121,7 @@ export const AgentIntegration = z.object({
 });
 export type AgentIntegration = z.infer<typeof AgentIntegration>;
 
-export const Plan = z.object({
+export const Plan = z.strictObject({
   id: z.string(),
   name: z.string().min(1),
   assignments: z.partialRecord(AgentId, z.string()),
@@ -126,7 +132,7 @@ export type Plan = z.infer<typeof Plan>;
 export const HealthEntry = MemberRef.extend({ restUntil: z.number(), reason: z.string() });
 export type HealthEntry = z.infer<typeof HealthEntry>;
 
-export const AdminState = z.object({
+export const AdminState = z.strictObject({
   version: z.number(),
   providers: z.array(Provider),
   groups: z.array(RouteGroup),
@@ -150,12 +156,17 @@ export const AdminErrorCode = z.enum([
   "INTERNAL",
 ]);
 
-export const AdminError = z.object({
-  error: z.object({ code: AdminErrorCode, message: z.string(), path: z.string().optional() }),
+export const AdminError = z.strictObject({
+  error: z.strictObject({
+    code: AdminErrorCode,
+    message: z.string(),
+    path: z.string().optional(),
+    refs: z.array(z.string()).optional(), // IN_USE：仍引用该供应商的路由组 id
+  }),
 });
 export type AdminError = z.infer<typeof AdminError>;
 
-export const UsageRow = z.object({
+export const UsageRow = z.strictObject({
   key: z.string(),
   requests: z.number(),
   errors: z.number(),
