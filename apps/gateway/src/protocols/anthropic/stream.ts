@@ -17,12 +17,36 @@ export function messageStart(id: string, model: string) {
   };
 }
 
-export function contentBlockStart(index: number) {
-  return { type: "content_block_start", index, content_block: { type: "text", text: "" } };
+export const TEXT_BLOCK = { type: "text", text: "" };
+// 上游不提供 thinking signature，按 Anthropic 形状给空串。
+export const THINKING_BLOCK = { type: "thinking", thinking: "", signature: "" };
+
+// Canonical stopReason → Anthropic stop_reason。
+export const STOP_REASON = {
+  stop: "end_turn",
+  tool_use: "tool_use",
+  length: "max_tokens",
+  cancelled: "end_turn",
+} as const;
+
+export function contentBlockStart(index: number, contentBlock: object = TEXT_BLOCK) {
+  return { type: "content_block_start", index, content_block: contentBlock };
 }
 
 export function contentBlockTextDelta(index: number, text: string) {
   return { type: "content_block_delta", index, delta: { type: "text_delta", text } };
+}
+
+export function contentBlockThinkingDelta(index: number, thinking: string) {
+  return { type: "content_block_delta", index, delta: { type: "thinking_delta", thinking } };
+}
+
+export function contentBlockInputJsonDelta(index: number, partialJson: string) {
+  return {
+    type: "content_block_delta",
+    index,
+    delta: { type: "input_json_delta", partial_json: partialJson },
+  };
 }
 
 export function contentBlockStop(index: number) {
